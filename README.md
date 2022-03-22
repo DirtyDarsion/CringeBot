@@ -1,0 +1,2 @@
+# CringeBot
+Telegram cringe bot
