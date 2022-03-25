@@ -112,7 +112,7 @@ async def fuck_def(message: types.Message):
     await message.reply('Пошел нахуй!')
 
 
-@dp.message_handler(is_not_private(message))
+@dp.message_handler()
 async def register_ower_messages(message: types.Message):
     register_user(message)
 
