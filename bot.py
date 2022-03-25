@@ -39,6 +39,16 @@ async def on_shutdown(dispatcher):
     await bot.delete_webhook()
 
 
+@dp.message_handler(lambda message: message.text.lower() == '+')
+async def test_def(message: types.Message):
+    register_user(message)
+
+    message_text = 'Список кринж команд:\n\n' \
+                   'кринж стат\n' \
+                   'кринж кто'
+    await message.answer(message_text)
+
+
 @dp.message_handler(lambda message: message.text.lower() == 'кринж команды' and is_not_private(message))
 async def test_def(message: types.Message):
     register_user(message)
