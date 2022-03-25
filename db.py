@@ -46,9 +46,26 @@ def register_user(message):
 
 def get_users(chat_id):
     conn, cursor = connect()
-    cursor.execute(f'SELECT tg_firstname, tg_username FROM users WHERE chat_id = {chat_id}')
+    cursor.execute(f'SELECT tg_firstname, fuckname, tg_username, tg_id FROM users WHERE chat_id = {chat_id}')
+
     users = []
     for row in cursor:
-        users.append([row[0], row[1]])
+        if row[1]:
+            name = row[1]
+        else:
+            name = row[0]
+        users.append({
+            'name': name,
+            'username': row[2],
+            'user_id': row[3],
+        })
     conn.close()
+
     return users
+
+
+def change_fuckname(message, tg_id, fuckname):
+    conn, cursor = connect()
+    chat_id = message.chat.id
+    cursor.execute(f'''UPDATE users SET fuckname = '{fuckname}' WHERE chat_id = {chat_id} AND tg_id = {tg_id}''')
+    conn.close()
