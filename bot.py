@@ -117,7 +117,7 @@ async def setname_start(call: types.CallbackQuery, callback_data: dict):
     await Fuckname.name.set()
 
 
-@dp.message_handler(state='*')
+@dp.message_handler(state=Fuckname.name)
 async def setname_end(message: types.Message, state: FSMContext):
     await state.update_data(fuckname=message.text)
     data = await state.get_data()
