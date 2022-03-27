@@ -87,7 +87,7 @@ async def who(message: types.Message):
 
     users = get_users(message.chat.id)
     user = choice(users)
-    message_text = f'На данный момент {title} это {user["username"]}'
+    message_text = f'На данный момент {title} это {user["name"]}'
 
     await message.answer(message_text)
 
