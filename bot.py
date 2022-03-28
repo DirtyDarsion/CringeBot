@@ -1,6 +1,7 @@
 import logging
 import os
-from random import choice
+import random
+from random import choice, randint
 
 from aiogram import Bot, Dispatcher, executor, types
 from aiogram.dispatcher import FSMContext
@@ -11,6 +12,7 @@ from aiogram.utils.callback_data import CallbackData
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 
 from db import register_user, get_users, change_fuckname
+from func import insults
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -19,6 +21,7 @@ load_dotenv()
 TOKEN = os.getenv('BOT_TOKEN')
 bot = Bot(token=TOKEN)
 dp = Dispatcher(bot, storage=MemoryStorage())
+logging.basicConfig(level=logging.INFO)
 
 HEROKU_APP_NAME = os.getenv('HEROKU_APP_NAME')
 
@@ -30,15 +33,6 @@ WEBHOOK_URL = f'{WEBHOOK_HOST}{WEBHOOK_PATH}'
 # webserver settings
 WEBAPP_HOST = '0.0.0.0'
 WEBAPP_PORT = os.getenv('PORT', default=8000)
-
-
-async def on_startup(dispatcher):
-    await bot.set_webhook(WEBHOOK_URL, drop_pending_updates=True)
-
-
-async def on_shutdown(dispatcher):
-    await bot.delete_webhook()
-
 
 # Global wars
 user_data = {}
@@ -59,7 +53,8 @@ async def commands(message: types.Message):
     message_text = 'Список кринж команд:\n\n' \
                    '- статы\n' \
                    '- кто\n' \
-                   '- погоняло'
+                   '- погоняло\n' \
+                   '- голосование'
     await message.answer(message_text)
 
 
@@ -128,6 +123,13 @@ async def setname_end(message: types.Message, state: FSMContext):
     await message.answer('Готово!')
 
 
+@dp.message_handler(Text('голосование', ignore_case=True))
+async def start_poll(message: types.Message):
+    register_user(message)
+
+    await message.answer('Не работает')
+
+
 @dp.message_handler(Text('.'))
 async def test_def(message: types.Message):
     register_user(message)
@@ -140,8 +142,24 @@ async def test_def(message: types.Message):
 async def register_ower_messages(message: types.Message):
     register_user(message)
 
+    if randint(1, 25) == 1:
+        await message.reply(random.choice(insults))
 
-logging.basicConfig(level=logging.INFO)
+
+async def on_startup(dispatcher):
+    await bot.set_webhook(WEBHOOK_URL, drop_pending_updates=True)
+
+
+async def on_shutdown(dispatcher):
+    logging.warning('Shutting down..')
+
+    await bot.delete_webhook()
+
+    await dp.storage.close()
+    await dp.storage.wait_closed()
+
+    logging.warning('Bye!')
+
 
 LOCAL = int(os.getenv('LOCAL_REPO'))
 if LOCAL:

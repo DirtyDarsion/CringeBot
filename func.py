@@ -1,2 +1,4 @@
-def is_not_private(message):
-    return message.chat.type != 'private'
+insults = [
+    'Ну и пидорюга!',
+    'Этот парниша явно давно не видал мужской ласки, необходимо это исправить',
+]
