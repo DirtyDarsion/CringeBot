@@ -12,7 +12,7 @@ from aiogram.utils.callback_data import CallbackData
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 
 from db import register_user, get_users, change_fuckname
-from func import insults
+from other import insults
 
 from dotenv import load_dotenv
 load_dotenv()
