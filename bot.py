@@ -1,15 +1,21 @@
 import logging
-import os
-import random
+from os import getenv
 from random import choice, randint
 
-from aiogram import Bot, Dispatcher, executor, types
+from aiohttp import web
+
+from aiogram import Bot, Dispatcher, Router, types
+from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.dispatcher import FSMContext
 from aiogram.dispatcher.filters import Text, ChatTypeFilter
 from aiogram.dispatcher.filters.state import State, StatesGroup
-from aiogram.utils.executor import start_webhook
+from aiogram.dispatcher.fsm.storage.redis import DefaultKeyBuilder, RedisStorage
+from aiogram.dispatcher.webhook.aiohttp_server import (
+    SimpleRequestHandler,
+    TokenBasedRequestHandler,
+    setup_application,
+)
 from aiogram.utils.callback_data import CallbackData
-from aiogram.contrib.fsm_storage.memory import MemoryStorage
 
 from db import register_user, get_users, change_fuckname
 from func import insults
@@ -18,21 +24,20 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
-TOKEN = os.getenv('BOT_TOKEN')
-bot = Bot(token=TOKEN)
-dp = Dispatcher(bot, storage=MemoryStorage())
-logging.basicConfig(level=logging.INFO)
+router = Router()
 
-HEROKU_APP_NAME = os.getenv('HEROKU_APP_NAME')
 
-# webhook settings
+TOKEN = getenv('BOT_TOKEN')
+LOCAL = int(getenv('LOCAL_REPO'))
+
+HEROKU_APP_NAME = getenv('HEROKU_APP_NAME')
 WEBHOOK_HOST = f'https://{HEROKU_APP_NAME}.herokuapp.com'
 WEBHOOK_PATH = f'/webhook/{TOKEN}'
 WEBHOOK_URL = f'{WEBHOOK_HOST}{WEBHOOK_PATH}'
 
-# webserver settings
 WEBAPP_HOST = '0.0.0.0'
-WEBAPP_PORT = os.getenv('PORT', default=8000)
+WEBAPP_PORT = getenv('PORT', default=8000)
+REDIS_DSN = "redis://127.0.0.1:6479"
 
 # Global wars
 user_data = {}
@@ -161,18 +166,30 @@ async def on_shutdown(dispatcher):
     logging.warning('Bye!')
 
 
-LOCAL = int(os.getenv('LOCAL_REPO'))
-if LOCAL:
-    if __name__ == '__main__':
-        executor.start_polling(dp, skip_updates=True)
-else:
-    if __name__ == '__main__':
-        start_webhook(
-            dispatcher=dp,
-            webhook_path=WEBHOOK_PATH,
-            skip_updates=True,
-            on_startup=on_startup,
-            on_shutdown=on_shutdown,
-            host=WEBAPP_HOST,
-            port=WEBAPP_PORT,
-        )
+def main():
+    session = AiohttpSession()
+    bot_settings = {"session": session, "parse_mode": "HTML"}
+    bot = Bot(token=TOKEN, **bot_settings)
+    storage = RedisStorage.from_url(REDIS_DSN, key_builder=DefaultKeyBuilder(with_bot_id=True))
+
+    dispatcher = Dispatcher(storage=storage)
+    dispatcher.include_router(router)
+    dispatcher.startup.register(on_startup)
+
+    app = web.Application()
+    SimpleRequestHandler(dispatcher=dispatcher, bot=bot).register(app, path=WEBHOOK_PATH)
+    TokenBasedRequestHandler(
+        dispatcher=multibot_dispatcher,
+        bot_settings=bot_settings,
+    ).register(app, path=OTHER_BOTS_PATH)
+
+    setup_application(app, main_dispatcher, bot=bot)
+    setup_application(app, multibot_dispatcher)
+
+    web.run_app(app, host=WEB_SERVER_HOST, port=WEB_SERVER_PORT)
+
+    logging.basicConfig(level=logging.INFO)
+
+
+if __name__ == '__main__':
+    main()
