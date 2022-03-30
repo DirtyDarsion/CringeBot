@@ -46,7 +46,7 @@ def register_user(message):
 
 def get_users(chat_id):
     conn, cursor = connect()
-    cursor.execute(f'''SELECT tg_firstname, fuckname, tg_username, tg_id, is_king
+    cursor.execute(f'''SELECT tg_firstname, fuckname, tg_username, tg_id, is_king, total_owner_king
                        FROM users WHERE chat_id = {chat_id} ORDER By is_king DESC''')
 
     users = []
@@ -60,6 +60,7 @@ def get_users(chat_id):
             'username': row[2],
             'user_id': row[3],
             'is_king': row[4],
+            'total_owner_king': row[5],
         })
     conn.close()
 
@@ -69,7 +70,7 @@ def get_users(chat_id):
 def get_users_poll(chat_id):
     conn, cursor = connect()
     cursor.execute(f'''SELECT tg_firstname, fuckname, tg_id, vote_count
-                       FROM users WHERE chat_id = {chat_id} ORDER BY vote_count DESC''')
+                       FROM users WHERE chat_id = {chat_id} ORDER BY vote_count DESC, total_owner_king DESC''')
 
     users = []
     for row in cursor:
@@ -96,7 +97,8 @@ def add_vote(chat_id, tg_id):
 def new_king(chat_id, user):
     conn, cursor = connect()
     cursor.execute(f'UPDATE users SET vote_count = 0, is_king = FALSE WHERE chat_id = {chat_id}')
-    cursor.execute(f'UPDATE users SET is_king = TRUE WHERE chat_id = {chat_id} AND tg_id = {user["user_id"]}')
+    cursor.execute(f'''UPDATE users SET is_king = TRUE, total_owner_king = total_owner_king + 1 
+                       WHERE chat_id = {chat_id} AND tg_id = {user["user_id"]}''')
     conn.close()
 
 
@@ -104,4 +106,10 @@ def change_fuckname(message, tg_id, fuckname):
     conn, cursor = connect()
     chat_id = message.chat.id
     cursor.execute(f'''UPDATE users SET fuckname = '{fuckname}' WHERE chat_id = {chat_id} AND tg_id = {tg_id}''')
+    conn.close()
+
+
+def clear_vote_count():
+    conn, cursor = connect()
+    cursor.execute(f'''UPDATE users SET vote_count = 0 WHERE *''')
     conn.close()

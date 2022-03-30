@@ -11,7 +11,7 @@ from aiogram.utils.executor import start_webhook
 from aiogram.utils.callback_data import CallbackData
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 
-from db import register_user, get_users, get_users_poll, change_fuckname, add_vote, new_king
+from db import register_user, get_users, get_users_poll, change_fuckname, add_vote, new_king, clear_vote_count
 from other import insults
 
 from dotenv import load_dotenv
@@ -36,7 +36,7 @@ WEBAPP_PORT = os.getenv('PORT', default=8000)
 
 # Global wars
 user_data = {}
-poll_data = []
+poll_data = {}
 
 # Callback Factory
 callback_fuckname = CallbackData('fuckname', 'user_id')
@@ -48,6 +48,7 @@ class Fuckname(StatesGroup):
     name = State()
 
 
+# Help
 @dp.message_handler(Text(startswith='кринж команды', ignore_case=True))
 async def commands(message: types.Message):
     register_user(message)
@@ -60,6 +61,7 @@ async def commands(message: types.Message):
     await message.answer(message_text)
 
 
+# Stats
 @dp.message_handler(Text(startswith='статы', ignore_case=True))
 async def stats(message: types.Message):
     register_user(message)
@@ -71,11 +73,12 @@ async def stats(message: types.Message):
             king_text = ', <b>Действующий кринж король!</b>'
         else:
             king_text = ''
-        message_text += '\n- ' + user['name'] + king_text
+        message_text += f'\n- {user["name"]}{king_text} (Всего: {user["total_owner_king"]})'
 
     await message.answer(message_text, parse_mode='HTML')
 
 
+# Who def
 @dp.message_handler(Text(startswith='кто', ignore_case=True))
 async def who(message: types.Message):
     register_user(message)
@@ -93,6 +96,7 @@ async def who(message: types.Message):
     await message.answer(message_text)
 
 
+# Fuckname
 @dp.message_handler(Text(startswith='погоняло', ignore_case=True))
 async def fuckname_change(message: types.Message):
     register_user(message)
@@ -153,6 +157,7 @@ async def update_poll_message(message: types.Message):
     await message.edit_text(message_text, reply_markup=keyboard)
 
 
+# Start poll
 @dp.message_handler(Text('голосование', ignore_case=True))
 async def start_poll(message: types.Message):
     register_user(message)
@@ -160,29 +165,33 @@ async def start_poll(message: types.Message):
     users = get_users(message.chat.id)
     keyboard, message_text = keyboard_and_text_poll(users)
 
-    await message.answer(message_text, reply_markup=keyboard)
+    message = await message.answer(message_text, reply_markup=keyboard)
+    await bot.pin_chat_message(message.chat.id, message.message_id)
 
 
 @dp.callback_query_handler(callback_poll.filter())
 async def poll_refresh(call: types.CallbackQuery, callback_data: dict):
-    if call.from_user.id in poll_data:
+    poll_data_chat = poll_data.get(call.message.chat.id, [])
+    if call.from_user.id in poll_data_chat:
         await call.answer('Ты уже проголосовал')
         return
 
     await call.answer()
     add_vote(call.message.chat.id, callback_data['user_id'])
 
-    poll_data.append(call.from_user.id)
+    poll_data_chat.append(call.from_user.id)
     count_chat_users = await bot.get_chat_member_count(call.message.chat.id)
-    if len(poll_data) == count_chat_users - 1:
+    if len(poll_data_chat) == count_chat_users - 1:
         user = get_users_poll(call.message.chat.id)[0]
         await call.message.edit_text(f'Поприветствуем нового кринж короля: <b>{user["name"]}</b>', parse_mode='HTML')
+        await bot.unpin_chat_message(call.message.chat.id, call.message.message_id)
         new_king(call.message.chat.id, user)
-        poll_data.clear()
+        poll_data_chat.clear()
     else:
         await update_poll_message(call.message)
 
 
+# All others message
 @dp.message_handler(ChatTypeFilter(types.ChatType.GROUP))
 async def register_ower_messages(message: types.Message):
     register_user(message)
@@ -193,6 +202,7 @@ async def register_ower_messages(message: types.Message):
 
 async def on_startup(dispatcher):
     await bot.set_webhook(WEBHOOK_URL, drop_pending_updates=True)
+    clear_vote_count()
 
 
 async def on_shutdown(dispatcher):
