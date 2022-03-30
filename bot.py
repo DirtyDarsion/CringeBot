@@ -36,9 +36,11 @@ WEBAPP_PORT = os.getenv('PORT', default=8000)
 
 # Global wars
 user_data = {}
+poll_data = []
 
 # Callback Factory
-callback_fuckname = CallbackData('prefix', 'user_id')
+callback_fuckname = CallbackData('fuckname', 'user_id')
+callback_poll = CallbackData('poll', 'user_id')
 
 
 # Class by fuckname
@@ -127,22 +129,43 @@ async def setname_end(message: types.Message, state: FSMContext):
 async def start_poll(message: types.Message):
     register_user(message)
 
-    await message.answer('Не работает')
+    buttons = []
+    users = get_users(message.chat.id)
+    for user in users:
+        buttons.append(types.InlineKeyboardButton(
+            text=user['name'],
+            callback_data=callback_poll.new(user_id=user['user_id'])
+        ))
+    keyboard = types.InlineKeyboardMarkup(row_width=1)
+    keyboard.add(*buttons)
+
+    message_text = 'Запсукаем голосование за титул нового кринж короля:'
+    for name in map(lambda x: x['name'], users):
+        message_text += f'\n- {name}, проголосовали: 0'
+
+    await message.answer(message_text, reply_markup=keyboard)
 
 
-@dp.message_handler(Text('.'))
-async def test_def(message: types.Message):
-    register_user(message)
+@dp.callback_query_handler(callback_poll.filter())
+async def setname_start(call: types.CallbackQuery, callback_data: dict):
+    if call.from_user.id in poll_data:
+        return
 
-    with open('trash.txt', 'a', encoding='UTF-8') as text:
-        text.write('\n' + str(message))
+    await call.answer()
+
+    user_data[call.from_user.id] = callback_data['user_id']
+
+    poll_data.append(call.from_user.id)
+    count_users = await bot.get_chat_members_count(call.message.chat.id)
+    if len(poll_data) == count_users - 1:
+        await call.message.edit_text('Новый победитель здесь')
 
 
 @dp.message_handler(ChatTypeFilter(types.ChatType.GROUP))
 async def register_ower_messages(message: types.Message):
     register_user(message)
 
-    if randint(1, 25) == 1:
+    if randint(1, 20) == 1:
         await message.reply(random.choice(insults))
 
 
