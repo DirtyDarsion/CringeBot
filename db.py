@@ -111,5 +111,5 @@ def change_fuckname(message, tg_id, fuckname):
 
 def clear_vote_count():
     conn, cursor = connect()
-    cursor.execute(f'''UPDATE users SET vote_count = 0 WHERE *''')
+    cursor.execute(f'''UPDATE users SET vote_count = 0''')
     conn.close()
