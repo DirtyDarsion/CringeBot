@@ -150,7 +150,7 @@ async def update_poll_message(message: types.Message):
     users = get_users_poll(message.chat.id)
     keyboard, message_text = keyboard_and_text_poll(users)
 
-    await message.answer(message_text, reply_markup=keyboard)
+    await message.edit_text(message_text, reply_markup=keyboard)
 
 
 @dp.message_handler(Text('голосование', ignore_case=True))
