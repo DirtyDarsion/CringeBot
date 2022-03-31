@@ -118,7 +118,7 @@ def clear_poll_data(chat_id):
     conn.close()
 
 
-def new_king(chat_id, user):
+def set_new_king(chat_id, user):
     conn, cursor = connect()
     cursor.execute(f'UPDATE users SET vote_count = 0, is_king = FALSE WHERE chat_id = {chat_id}')
     cursor.execute(f'''UPDATE users SET is_king = TRUE, total_owner_king = total_owner_king + 1 

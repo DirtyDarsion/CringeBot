@@ -189,13 +189,14 @@ async def poll_refresh(call: types.CallbackQuery, callback_data: dict):
 
     if len(poll_data) == count_chat_users - 1:
         user = db.get_users_poll(call.message.chat.id)[0]
-        db.new_king(call.message.chat.id, user)
+        db.set_new_king(call.message.chat.id, user)
         db.clear_poll_data(call.message.chat.id)
 
         await call.message.edit_text(f'Поприветствуем нового кринж короля: <b>{user["name"]}</b>', parse_mode='HTML')
         await bot.unpin_chat_message(call.message.chat.id, call.message.message_id)
         with open(f'user_photos/{user["user_id"]}.jpg', 'rb') as f:
             await bot.set_chat_photo(call.message.chat.id, f)
+        await bot.delete_chat_photo(call.message.chat.id)
         await bot.set_chat_description(call.message.chat.id, f'Кринж король на сегодня: {user["name"]}')
     else:
         await update_poll_message(call.message)
