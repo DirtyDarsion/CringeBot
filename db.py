@@ -94,6 +94,30 @@ def add_vote(chat_id, tg_id):
     conn.close()
 
 
+def get_poll_data(chat_id):
+    conn, cursor = connect()
+    cursor.execute(f'SELECT user_id FROM poll_data WHERE chat_id = {chat_id}')
+
+    users = []
+    for row in cursor:
+        users.append(row[0])
+    conn.close()
+
+    return users
+
+
+def add_user_to_poll_data(chat_id, user_id):
+    conn, cursor = connect()
+    cursor.execute(f'INSERT INTO poll_data (user_id, chat_id) VALUES ({user_id}, {chat_id})')
+    conn.close()
+
+
+def clear_poll_data(chat_id):
+    conn, cursor = connect()
+    cursor.execute(f'DELETE FROM poll_data WHERE chat_id = {chat_id}')
+    conn.close()
+
+
 def new_king(chat_id, user):
     conn, cursor = connect()
     cursor.execute(f'UPDATE users SET vote_count = 0, is_king = FALSE WHERE chat_id = {chat_id}')

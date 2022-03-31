@@ -11,7 +11,7 @@ from aiogram.utils.executor import start_webhook
 from aiogram.utils.callback_data import CallbackData
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 
-from db import register_user, get_users, get_users_poll, change_fuckname, add_vote, new_king, clear_vote_count
+import db
 from other import insults
 
 from dotenv import load_dotenv
@@ -36,10 +36,10 @@ WEBAPP_PORT = os.getenv('PORT', default=8000)
 
 # Global wars
 user_data = {}
-poll_data = {}
 
 # Callback Factory
-callback_fuckname = CallbackData('fuckname', 'user_id')
+callback_fuckname = CallbackData('fuckname', 'user_id', 'from_user_id')
+callback_photo = CallbackData('photo', 'user_id', 'from_user_id')
 callback_poll = CallbackData('poll', 'user_id', 'users')
 
 
@@ -48,10 +48,14 @@ class Fuckname(StatesGroup):
     name = State()
 
 
+class Photo(StatesGroup):
+    url = State()
+
+
 # Help
 @dp.message_handler(Text(startswith='кринж команды', ignore_case=True))
 async def commands(message: types.Message):
-    register_user(message)
+    db.register_user(message)
 
     message_text = 'Список кринж команд:\n\n' \
                    '- статы\n' \
@@ -64,9 +68,9 @@ async def commands(message: types.Message):
 # Stats
 @dp.message_handler(Text(startswith='статы', ignore_case=True))
 async def stats(message: types.Message):
-    register_user(message)
+    db.register_user(message)
 
-    users = get_users(message.chat.id)
+    users = db.get_users(message.chat.id)
     message_text = 'Список бойцов:\n'
     for user in users:
         if user['is_king']:
@@ -81,7 +85,7 @@ async def stats(message: types.Message):
 # Who def
 @dp.message_handler(Text(startswith='кто', ignore_case=True))
 async def who(message: types.Message):
-    register_user(message)
+    db.register_user(message)
 
     if len(message.text.split()) > 1:
         title = ' '.join(message.text.split()[1:])
@@ -89,7 +93,7 @@ async def who(message: types.Message):
         await message.answer('Напиши второе слово')
         return
 
-    users = get_users(message.chat.id)
+    users = db.get_users(message.chat.id)
     user = choice(users)
     message_text = f'На данный момент {title} это {user["name"]}'
 
@@ -99,13 +103,13 @@ async def who(message: types.Message):
 # Fuckname
 @dp.message_handler(Text(startswith='погоняло', ignore_case=True))
 async def fuckname_change(message: types.Message):
-    register_user(message)
+    db.register_user(message)
 
     buttons = []
-    for user in get_users(message.chat.id):
+    for user in db.get_users(message.chat.id):
         buttons.append(types.InlineKeyboardButton(
             text=user['name'],
-            callback_data=callback_fuckname.new(user_id=user['user_id'])
+            callback_data=callback_fuckname.new(user_id=user['user_id'], from_user_id=message.from_user.id)
         ))
     keyboard = types.InlineKeyboardMarkup(row_width=1)
     keyboard.add(*buttons)
@@ -115,7 +119,9 @@ async def fuckname_change(message: types.Message):
 
 @dp.callback_query_handler(callback_fuckname.filter())
 async def setname_start(call: types.CallbackQuery, callback_data: dict):
-    await call.answer()
+    if int(callback_data['from_user_id']) != call.from_user.id:
+        await call.answer()
+        return
 
     user_data[call.from_user.id] = callback_data['user_id']
     await call.message.edit_text('Пиши новое погоняло:')
@@ -129,7 +135,7 @@ async def setname_end(message: types.Message, state: FSMContext):
     fuckname = data['fuckname']
     await state.finish()
 
-    change_fuckname(message, user_data[message.from_user.id], fuckname)
+    db.change_fuckname(message, user_data[message.from_user.id], fuckname)
     await message.answer('Готово!')
 
 
@@ -151,7 +157,7 @@ def keyboard_and_text_poll(users):
 
 
 async def update_poll_message(message: types.Message):
-    users = get_users_poll(message.chat.id)
+    users = db.get_users_poll(message.chat.id)
     keyboard, message_text = keyboard_and_text_poll(users)
 
     await message.edit_text(message_text, reply_markup=keyboard)
@@ -160,9 +166,9 @@ async def update_poll_message(message: types.Message):
 # Start poll
 @dp.message_handler(Text('голосование', ignore_case=True))
 async def start_poll(message: types.Message):
-    register_user(message)
+    db.register_user(message)
 
-    users = get_users(message.chat.id)
+    users = db.get_users(message.chat.id)
     keyboard, message_text = keyboard_and_text_poll(users)
 
     message = await message.answer(message_text, reply_markup=keyboard)
@@ -171,22 +177,26 @@ async def start_poll(message: types.Message):
 
 @dp.callback_query_handler(callback_poll.filter())
 async def poll_refresh(call: types.CallbackQuery, callback_data: dict):
-    poll_data_chat = poll_data.get(call.message.chat.id, [])
-    if call.from_user.id in poll_data_chat:
+    poll_data = db.get_poll_data(call.message.chat.id)
+    if call.from_user.id in poll_data:
         await call.answer('Ты уже проголосовал')
         return
 
-    await call.answer()
-    add_vote(call.message.chat.id, callback_data['user_id'])
-
-    poll_data_chat.append(call.from_user.id)
+    db.add_vote(call.message.chat.id, callback_data['user_id'])
+    db.add_user_to_poll_data(call.message.chat.id, call.from_user.id)
+    poll_data.append(call.from_user.id)
     count_chat_users = await bot.get_chat_member_count(call.message.chat.id)
-    if len(poll_data_chat) == count_chat_users - 1:
-        user = get_users_poll(call.message.chat.id)[0]
+
+    if len(poll_data) == count_chat_users - 1:
+        user = db.get_users_poll(call.message.chat.id)[0]
+        db.new_king(call.message.chat.id, user)
+        db.clear_poll_data(call.message.chat.id)
+
         await call.message.edit_text(f'Поприветствуем нового кринж короля: <b>{user["name"]}</b>', parse_mode='HTML')
         await bot.unpin_chat_message(call.message.chat.id, call.message.message_id)
-        new_king(call.message.chat.id, user)
-        poll_data_chat.clear()
+        with open(f'user_photos/{user["user_id"]}.jpg', 'rb') as f:
+            await bot.set_chat_photo(call.message.chat.id, f)
+        await bot.set_chat_description(call.message.chat.id, f'Кринж король на сегодня: {user["name"]}')
     else:
         await update_poll_message(call.message)
 
@@ -194,7 +204,7 @@ async def poll_refresh(call: types.CallbackQuery, callback_data: dict):
 # All others message
 @dp.message_handler(ChatTypeFilter(types.ChatType.GROUP))
 async def register_ower_messages(message: types.Message):
-    register_user(message)
+    db.register_user(message)
 
     if randint(1, 20) == 1:
         await message.reply(random.choice(insults))
@@ -202,7 +212,7 @@ async def register_ower_messages(message: types.Message):
 
 async def on_startup(dispatcher):
     await bot.set_webhook(WEBHOOK_URL, drop_pending_updates=True)
-    clear_vote_count()
+    db.clear_vote_count()
 
 
 async def on_shutdown(dispatcher):
