@@ -112,9 +112,12 @@ def add_user_to_poll_data(chat_id, user_id):
     conn.close()
 
 
-def clear_poll_data(chat_id):
+def clear_poll_data(chat_id=None, clear_all=False):
     conn, cursor = connect()
-    cursor.execute(f'DELETE FROM poll_data WHERE chat_id = {chat_id}')
+    if clear_all:
+        cursor.execute(f'DELETE FROM poll_data')
+    else:
+        cursor.execute(f'DELETE FROM poll_data WHERE chat_id = {chat_id}')
     conn.close()
 
 

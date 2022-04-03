@@ -235,6 +235,7 @@ async def register_ower_messages(message: types.Message):
 async def on_startup(dispatcher):
     await bot.set_webhook(WEBHOOK_URL, drop_pending_updates=True)
     db.clear_vote_count()
+    db.clear_poll_data(clear_all=True)
 
 
 async def on_shutdown(dispatcher):
