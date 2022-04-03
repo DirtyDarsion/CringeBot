@@ -9,7 +9,7 @@ from aiogram.dispatcher.filters import Text, ChatTypeFilter
 from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiogram.utils.executor import start_webhook
 from aiogram.utils.callback_data import CallbackData
-from aiogram.utils.exceptions import ChatDescriptionIsNotModified
+from aiogram.utils.exceptions import ChatDescriptionIsNotModified, BadRequest
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 
 import db
@@ -35,6 +35,8 @@ WEBAPP_HOST = '0.0.0.0'
 WEBAPP_PORT = os.getenv('PORT', default=8000)
 
 # Global wars
+ADMIN = os.getenv('ADMIN')
+poll_message = {}
 user_data = {}
 insults = [
     'Ну и пидорюга!',
@@ -63,7 +65,7 @@ class Photo(StatesGroup):
 
 
 # Help
-@dp.message_handler(Text(startswith='кринж команды', ignore_case=True))
+@dp.message_handler(Text(startswith='кринж команды', ignore_case=True), ChatTypeFilter(types.ChatType.GROUP))
 async def commands(message: types.Message):
     db.register_user(message)
 
@@ -76,7 +78,7 @@ async def commands(message: types.Message):
 
 
 # Stats
-@dp.message_handler(Text(startswith='статы', ignore_case=True))
+@dp.message_handler(Text(startswith='статы', ignore_case=True), ChatTypeFilter(types.ChatType.GROUP))
 async def stats(message: types.Message):
     db.register_user(message)
 
@@ -93,7 +95,7 @@ async def stats(message: types.Message):
 
 
 # Who def
-@dp.message_handler(Text(startswith='кто', ignore_case=True))
+@dp.message_handler(Text(startswith='кто', ignore_case=True), ChatTypeFilter(types.ChatType.GROUP))
 async def who(message: types.Message):
     db.register_user(message)
 
@@ -111,7 +113,7 @@ async def who(message: types.Message):
 
 
 # Fuckname
-@dp.message_handler(Text(startswith='погоняло', ignore_case=True))
+@dp.message_handler(Text(startswith='погоняло', ignore_case=True), ChatTypeFilter(types.ChatType.GROUP))
 async def fuckname_change(message: types.Message):
     db.register_user(message)
 
@@ -173,8 +175,36 @@ async def update_poll_message(message: types.Message):
     await message.edit_text(message_text, reply_markup=keyboard)
 
 
+async def set_poll_winner(message):
+    user = db.get_users_poll(message.chat.id)[0]
+    db.set_new_king(message.chat.id, user)
+    db.clear_poll_data(message.chat.id)
+
+    main_message = poll_message[message.chat.id]
+
+    await message.answer(f'Поприветствуем нового кринж короля: <b>{user["name"]}</b>', parse_mode='HTML')
+    await main_message.edit_text('Голосование окончено')
+    await bot.unpin_chat_message(main_message.chat.id, main_message.message_id)
+
+    try:
+        with open(f'user_photos/{user["user_id"]}.jpg', 'rb') as f:
+            try:
+                await bot.delete_chat_photo(message.chat.id)
+            except BadRequest:
+                logging.info('No photo chat.')
+            await bot.set_chat_photo(message.chat.id, f)
+    except FileNotFoundError:
+        await message.answer('Пора бы уже сделать этому парнише кринж фото')
+        logging.warning('No photo on address')
+
+    try:
+        await bot.set_chat_description(message.chat.id, f'Кринж король на сегодня: {user["name"]}')
+    except ChatDescriptionIsNotModified:
+        logging.info('Description not modified.')
+
+
 # Start poll
-@dp.message_handler(Text('голосование', ignore_case=True))
+@dp.message_handler(Text('голосование', ignore_case=True), ChatTypeFilter(types.ChatType.GROUP))
 async def start_poll(message: types.Message):
     db.register_user(message)
 
@@ -182,15 +212,16 @@ async def start_poll(message: types.Message):
     keyboard, message_text = keyboard_and_text_poll(users)
 
     message = await message.answer(message_text, reply_markup=keyboard)
+    poll_message[message.chat.id] = message
     await bot.pin_chat_message(message.chat.id, message.message_id)
 
 
 @dp.callback_query_handler(callback_poll.filter())
 async def poll_refresh(call: types.CallbackQuery, callback_data: dict):
     poll_data = db.get_poll_data(call.message.chat.id)
-    if call.from_user.id in poll_data:
-        await call.answer('Ты уже проголосовал')
-        return
+    # if call.from_user.id in poll_data:
+    #     await call.answer('Ты уже проголосовал')
+    #     return
 
     await call.answer()
 
@@ -199,28 +230,19 @@ async def poll_refresh(call: types.CallbackQuery, callback_data: dict):
     poll_data.append(call.from_user.id)
     count_chat_users = await bot.get_chat_member_count(call.message.chat.id)
 
-    if len(poll_data) == count_chat_users - 1:
-        user = db.get_users_poll(call.message.chat.id)[0]
-        db.set_new_king(call.message.chat.id, user)
-        db.clear_poll_data(call.message.chat.id)
-
-        await call.message.edit_text(f'Поприветствуем нового кринж короля: <b>{user["name"]}</b>', parse_mode='HTML')
-        await bot.unpin_chat_message(call.message.chat.id, call.message.message_id)
-
-        try:
-            with open(f'user_photos/{user["user_id"]}.jpg', 'rb') as f:
-                await bot.delete_chat_photo(call.message.chat.id)
-                await bot.set_chat_photo(call.message.chat.id, f)
-        except FileNotFoundError:
-            await call.message.answer('Пора бы уже сделать этому парнише кринж фото')
-
-        try:
-            await bot.set_chat_description(call.message.chat.id, f'Кринж король на сегодня: {user["name"]}')
-        except ChatDescriptionIsNotModified:
-            logging.warning('Description not modified.')
-
+    if len(poll_data) == count_chat_users + 2:  # -1
+        await set_poll_winner(call.message)
     else:
         await update_poll_message(call.message)
+
+
+@dp.message_handler(Text('стоп', ignore_case=True), ChatTypeFilter(types.ChatType.GROUP))
+async def start_poll(message: types.Message):
+    db.register_user(message)
+
+    if message.from_user.id == int(ADMIN):
+        await message.answer('Досрочная остановка голосования')
+        await set_poll_winner(message)
 
 
 # All others message
@@ -230,6 +252,12 @@ async def register_ower_messages(message: types.Message):
 
     if randint(1, 20) == 1:
         await message.reply(random.choice(insults))
+
+
+# Private messages
+@dp.message_handler(ChatTypeFilter(types.ChatType.PRIVATE))
+async def register_ower_messages(message: types.Message):
+    await message.answer('Бот работает только в группе.')
 
 
 async def on_startup(dispatcher):
