@@ -9,14 +9,14 @@ from aiogram.dispatcher.filters import Text, ChatTypeFilter
 from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiogram.utils.executor import start_webhook
 from aiogram.utils.callback_data import CallbackData
+from aiogram.utils.exceptions import ChatDescriptionIsNotModified
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 
 import db
-from other import insults
 
 from dotenv import load_dotenv
-load_dotenv()
 
+load_dotenv()
 
 TOKEN = os.getenv('BOT_TOKEN')
 bot = Bot(token=TOKEN)
@@ -36,10 +36,20 @@ WEBAPP_PORT = os.getenv('PORT', default=8000)
 
 # Global wars
 user_data = {}
+insults = [
+    'Ну и пидорюга!',
+    'Этот парниша явно давно не видал мужской ласки, необходимо это исправить',
+    'Да ты что',
+    'Ебать кринжа навалил',
+    'Хохлосвин найден',
+    'Глотай, не слышно',
+    'А вот за такую херню с тебя вкид пацанам причитается',
+    'Этому вторяка больше не давать',
+    'Навалил в штаны плотного кринжа',
+]
 
 # Callback Factory
 callback_fuckname = CallbackData('fuckname', 'user_id', 'from_user_id')
-callback_photo = CallbackData('photo', 'user_id', 'from_user_id')
 callback_poll = CallbackData('poll', 'user_id', 'users')
 
 
@@ -182,6 +192,8 @@ async def poll_refresh(call: types.CallbackQuery, callback_data: dict):
         await call.answer('Ты уже проголосовал')
         return
 
+    await call.answer()
+
     db.add_vote(call.message.chat.id, callback_data['user_id'])
     db.add_user_to_poll_data(call.message.chat.id, call.from_user.id)
     poll_data.append(call.from_user.id)
@@ -194,10 +206,19 @@ async def poll_refresh(call: types.CallbackQuery, callback_data: dict):
 
         await call.message.edit_text(f'Поприветствуем нового кринж короля: <b>{user["name"]}</b>', parse_mode='HTML')
         await bot.unpin_chat_message(call.message.chat.id, call.message.message_id)
-        with open(f'user_photos/{user["user_id"]}.jpg', 'rb') as f:
-            await bot.set_chat_photo(call.message.chat.id, f)
-        await bot.delete_chat_photo(call.message.chat.id)
-        await bot.set_chat_description(call.message.chat.id, f'Кринж король на сегодня: {user["name"]}')
+
+        try:
+            with open(f'user_photos/{user["user_id"]}.jpg', 'rb') as f:
+                await bot.delete_chat_photo(call.message.chat.id)
+                await bot.set_chat_photo(call.message.chat.id, f)
+        except FileNotFoundError:
+            await call.message.answer('Пора бы уже сделать этому парнише кринж фото')
+
+        try:
+            await bot.set_chat_description(call.message.chat.id, f'Кринж король на сегодня: {user["name"]}')
+        except ChatDescriptionIsNotModified:
+            logging.warning('Description not modified.')
+
     else:
         await update_poll_message(call.message)
 
