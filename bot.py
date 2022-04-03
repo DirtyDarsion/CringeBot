@@ -5,7 +5,7 @@ from random import choice, randint
 
 from aiogram import Bot, Dispatcher, executor, types
 from aiogram.dispatcher import FSMContext
-from aiogram.dispatcher.filters import Text, ChatTypeFilter
+from aiogram.dispatcher.filters import Text, ChatTypeFilter, IDFilter
 from aiogram.dispatcher.filters.state import State, StatesGroup
 from aiogram.utils.executor import start_webhook
 from aiogram.utils.callback_data import CallbackData
@@ -219,9 +219,9 @@ async def start_poll(message: types.Message):
 @dp.callback_query_handler(callback_poll.filter())
 async def poll_refresh(call: types.CallbackQuery, callback_data: dict):
     poll_data = db.get_poll_data(call.message.chat.id)
-    # if call.from_user.id in poll_data:
-    #     await call.answer('Ты уже проголосовал')
-    #     return
+    if call.from_user.id in poll_data:
+        await call.answer('Ты уже проголосовал')
+        return
 
     await call.answer()
 
@@ -230,19 +230,18 @@ async def poll_refresh(call: types.CallbackQuery, callback_data: dict):
     poll_data.append(call.from_user.id)
     count_chat_users = await bot.get_chat_member_count(call.message.chat.id)
 
-    if len(poll_data) == count_chat_users + 2:  # -1
+    if len(poll_data) == count_chat_users - 1:
         await set_poll_winner(call.message)
     else:
         await update_poll_message(call.message)
 
 
-@dp.message_handler(Text('стоп', ignore_case=True), ChatTypeFilter(types.ChatType.GROUP))
+@dp.message_handler(Text('стоп', ignore_case=True), ChatTypeFilter(types.ChatType.GROUP), IDFilter(user_id=int(ADMIN)))
 async def start_poll(message: types.Message):
     db.register_user(message)
 
-    if message.from_user.id == int(ADMIN):
-        await message.answer('Досрочная остановка голосования')
-        await set_poll_winner(message)
+    await message.answer('Досрочная остановка голосования')
+    await set_poll_winner(message)
 
 
 # All others message
