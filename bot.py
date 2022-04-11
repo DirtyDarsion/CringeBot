@@ -249,7 +249,7 @@ async def start_poll(message: types.Message):
 async def register_ower_messages(message: types.Message):
     db.register_user(message)
 
-    if randint(1, 20) == 1:
+    if randint(1, 100) == 1:
         await message.reply(random.choice(insults))
 
 
